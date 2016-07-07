@@ -7,11 +7,11 @@
 //
 
 #import "RCTPushWithGCM.h"
+#import "RCTEventDispatcher.h"
 
 @interface PushWithGCM ()
 
 @property(nonatomic, copy) NSString *gcmSenderID;
-@property(nonatomic, copy) NSString *registrationKey;
 @property(nonatomic, copy) NSString *messageKey;
 @property(nonatomic, copy) NSString *registrationToken;
 @property(nonatomic, strong) NSArray *topics;
@@ -26,16 +26,47 @@
   
 }
 
+@synthesize bridge = _bridge;
+
 RCT_EXPORT_MODULE()
 
 - (dispatch_queue_t)methodQueue
 {
   return dispatch_get_main_queue();
 }
+RCT_EXPORT_METHOD(registerForNotificationsGCM)
+{
+  UIUserNotificationType allNotificationTypes = (UIUserNotificationTypeSound | UIUserNotificationTypeAlert | UIUserNotificationTypeBadge);
+  
+  UIUserNotificationSettings *settings = [UIUserNotificationSettings settingsForTypes:allNotificationTypes categories:nil];
+  
+  [[UIApplication sharedApplication] registerUserNotificationSettings:settings];
+  [[UIApplication sharedApplication] registerForRemoteNotifications];
+}
+RCT_EXPORT_METHOD(onAppBecomeActiveGCM)
+{
+  if (!_connectedToGCM) {
+    // Connect to the GCM server to receive non-APNS notifications
+    [[GCMService sharedInstance] connectWithHandler:^(NSError *error) {
+      if (error) {
+        NSLog(@"Could not connect to GCM: %@", error.localizedDescription);
+      } else {
+        _connectedToGCM = true;
+        NSLog(@"Connected to GCM");
+        [self subscribeToTopics:self.topics];
+        
+        [_bridge.eventDispatcher sendDeviceEventWithName:@"ConnectedToGCM"
+                                                    body:@"success"];
+      }
+    }];
+  }
+  else {
+    NSLog(@"Already connected to GCM");
+  }
+}
 
 RCT_EXPORT_METHOD(configureGCM)
 {
-  _registrationKey = @"onRegistrationCompleted";
   _messageKey = @"onMessageReceived";
   // Configure the Google context: parses the GoogleService-Info.plist, and initializes
   // the services that have entries in the file
@@ -59,6 +90,9 @@ RCT_EXPORT_METHOD(configureGCM)
       weakSelf.registrationToken = registrationToken;
       NSLog(@"Registration Token: %@", registrationToken);
       
+      [_bridge.eventDispatcher sendDeviceEventWithName:@"RegisteredToGCM"
+                                                  body:registrationToken];
+      
       // Connect to the GCM server to receive non-APNS notifications
       [[GCMService sharedInstance] connectWithHandler:^(NSError *error) {
         if (error) {
@@ -67,19 +101,13 @@ RCT_EXPORT_METHOD(configureGCM)
           _connectedToGCM = true;
           NSLog(@"Connected to GCM");
           [weakSelf subscribeToTopics:(weakSelf.topics)];
+          
+          [_bridge.eventDispatcher sendDeviceEventWithName:@"ConnectedToGCM"
+                                                      body:@"success"];
         }
       }];
-      
-      NSDictionary *userInfo = @{@"registrationToken":registrationToken};
-      [[NSNotificationCenter defaultCenter] postNotificationName: weakSelf.registrationKey
-                                                          object: nil
-                                                        userInfo: userInfo];
     } else {
       NSLog(@"Registration to GCM failed with error: %@", error.localizedDescription);
-      NSDictionary *userInfo = @{@"error":error.localizedDescription};
-      [[NSNotificationCenter defaultCenter] postNotificationName: weakSelf.registrationKey
-                                                          object: nil
-                                                        userInfo: userInfo];
     }
   };
 }
@@ -104,11 +132,16 @@ RCT_EXPORT_METHOD(configureGCM)
   return data;
 }
 
-RCT_EXPORT_METHOD(registerToGCMWithDeviceToken:(NSString *)deviceToken isSandbox:(BOOL)sandbox)
+RCT_EXPORT_METHOD(registerToGCMWithDeviceToken:(NSString *)deviceToken)
 {
+  int isSandbox = 0;
+  #ifdef DEBUG
+    isSandbox = 1;
+  #endif
+  
   NSData *token = [self dataFromHexString:deviceToken];
   _registrationOptions = @{kGGLInstanceIDRegisterAPNSOption: token,
-                           kGGLInstanceIDAPNSServerTypeSandboxOption: @(sandbox)};
+                           kGGLInstanceIDAPNSServerTypeSandboxOption: @(isSandbox)};
   [[GGLInstanceID sharedInstance] tokenWithAuthorizedEntity: _gcmSenderID
                                                       scope: kGGLInstanceIDScopeGCM
                                                     options: _registrationOptions

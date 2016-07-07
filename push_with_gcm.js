@@ -2,23 +2,31 @@ import React from 'react-native'
 var PushWithGCM = React.NativeModules.PushWithGCM
 
 module.exports = {
-  configure () {
+  configure() {
     PushWithGCM.configureGCM()
   },
 
-  registerToken (deviceToken, sandbox) {
-    PushWithGCM.registerToGCMWithDeviceToken(deviceToken, sandbox)
+  onAppBecomeActive() {
+    PushWithGCM.onAppBecomeActiveGCM()
   },
 
-  unregisterToken () {
+  registerToken(deviceToken) {
+    PushWithGCM.registerToGCMWithDeviceToken(deviceToken)
+  },
+
+  registerForNotifications() {
+    PushWithGCM.registerForNotificationsGCM();
+  },
+
+  unregisterToken() {
     PushWithGCM.unregisterTokenFromGCM()
   },
 
-  subscribeToTopics (topics) {
+  subscribeToTopics(topics) {
     PushWithGCM.subscribeToTopics(topics)
   },
 
-  unsubscribeFromTopics (topics) {
+  unsubscribeFromTopics(topics) {
     PushWithGCM.unsubscribeFromTopics(topics)
   }
 }
