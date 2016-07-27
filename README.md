@@ -93,7 +93,7 @@ These topics will be registered as `/topics/push`, `/topics/with` and
 
 When you're done with these topics, simply call
 ```js
-PushWithGCM.unsibscribeFromTopics(['first-time-users'])
+PushWithGCM.unsubscribeFromTopics(['first-time-users'])
 ```
 
 ## Troubleshooting
